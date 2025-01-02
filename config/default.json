@@ -1,6 +1,6 @@
 {
   "gemini": {
-    "apiKey": "AIzaSyAEdcAc8bP1wt4cTG6REKlZl9nmzGG7wQU"
+    "apiKey": ""
   },
   "logging": {
     "errorLogPath": "logs/error-%DATE%.log",
