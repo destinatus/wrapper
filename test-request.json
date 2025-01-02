@@ -1,0 +1,9 @@
+{
+  "model": "gemini-pro",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, how are you?"
+    }
+  ]
+}

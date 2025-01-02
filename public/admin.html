@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Key Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .key-list {
+            margin-top: 20px;
+        }
+        .key-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            align-items: center;
+        }
+        .key-item.blocked {
+            background-color: #fff5f5;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+        button.block {
+            background-color: #dc3545;
+        }
+        button.unblock {
+            background-color: #28a745;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .stats {
+            font-size: 0.9em;
+            color: #666;
+        }
+        .date-input {
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>API Key Management</h1>
+        <button onclick="generateNewKey()">Generate New API Key</button>
+        <div class="key-list" id="keyList">
+            <!-- Keys will be populated here -->
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api-key';
+
+        async function fetchKeys() {
+            try {
+                const response = await fetch(API_BASE);
+                const keys = await response.json();
+                displayKeys(keys);
+            } catch (error) {
+                console.error('Error fetching keys:', error);
+            }
+        }
+
+        function parseDate(dateStr) {
+            // Handle both date string and Date object inputs
+            const d = dateStr instanceof Date ? dateStr : new Date(dateStr);
+            if (isNaN(d.getTime())) {
+                throw new Error('Invalid date');
+            }
+            return d;
+        }
+
+        function formatDate(date) {
+            try {
+                const d = parseDate(date);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            } catch (error) {
+                console.error('Error formatting date:', error);
+                return formatDate(new Date()); // Return today's date as fallback
+            }
+        }
+
+        function displayKeys(keys) {
+            const keyList = document.getElementById('keyList');
+            const today = formatDate(new Date());
+            
+            keyList.innerHTML = keys.map(key => {
+                const expiryDate = formatDate(key.expiresAt);
+                const lastUsedStr = key.lastUsed 
+                    ? new Date(key.lastUsed).toLocaleString()
+                    : 'Never';
+
+                return `
+                    <div class="key-item ${key.isBlocked ? 'blocked' : ''}">
+                        <div>
+                            <strong>Key:</strong> ${key.key}
+                            <div class="stats">
+                                <span>Usage: ${key.usageCount}</span>
+                                <span> | Last used: ${lastUsedStr}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <strong>Status:</strong> ${key.isBlocked ? 'Blocked' : 'Active'}
+                        </div>
+                        <div>
+                            <strong>Expires:</strong>
+                            <input type="date" class="date-input" 
+                                value="${expiryDate}"
+                                min="${today}"
+                                onchange="handleDateChange('${key.key}', this)">
+                        </div>
+                        <div>
+                            ${key.isBlocked 
+                                ? `<button class="unblock" onclick="unblockKey('${key.key}')">Unblock</button>`
+                                : `<button class="block" onclick="blockKey('${key.key}')">Block</button>`
+                            }
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function generateNewKey() {
+            try {
+                await fetch(`${API_BASE}/generate`, { method: 'POST' });
+                fetchKeys();
+            } catch (error) {
+                console.error('Error generating key:', error);
+            }
+        }
+
+        async function blockKey(key) {
+            try {
+                await fetch(`${API_BASE}/${key}/block`, { method: 'PATCH' });
+                fetchKeys();
+            } catch (error) {
+                console.error('Error blocking key:', error);
+            }
+        }
+
+        async function unblockKey(key) {
+            try {
+                await fetch(`${API_BASE}/${key}/unblock`, { method: 'PATCH' });
+                fetchKeys();
+            } catch (error) {
+                console.error('Error unblocking key:', error);
+            }
+        }
+
+        function handleDateChange(key, input) {
+            try {
+                // Normalize the input value to ensure consistent format
+                const [year, month, day] = input.value.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+                
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                
+                if (isNaN(selectedDate.getTime())) {
+                    throw new Error('Invalid date format');
+                }
+
+                if (selectedDate < now) {
+                    alert('Expiration date must be in the future');
+                    input.value = formatDate(new Date());
+                    return;
+                }
+
+                updateExpiration(key, selectedDate);
+            } catch (error) {
+                console.error('Error handling date change:', error);
+                alert('Invalid date format. Please use YYYY-MM-DD');
+                input.value = formatDate(new Date());
+            }
+        }
+
+        async function updateExpiration(key, date) {
+            try {
+                if (!(date instanceof Date) || isNaN(date.getTime())) {
+                    throw new Error('Invalid date object');
+                }
+
+                const response = await fetch(`${API_BASE}/${key}/expiration`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ expiresAt: date.toISOString() })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => null);
+                    throw new Error(errorData?.message || 'Failed to update expiration date');
+                }
+
+                fetchKeys();
+            } catch (error) {
+                console.error('Error updating expiration:', error);
+                alert('Failed to update expiration date: ' + error.message);
+            }
+        }
+
+        // Initial load
+        fetchKeys();
+    </script>
+</body>
+</html>
